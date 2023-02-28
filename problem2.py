@@ -84,9 +84,13 @@ def SIR_func(x):
     return I - I_hat
 
 # Least squares
-x0 = np.array([population, 0.1, 0.1])
-res = least_squares(SIR_func, x0, method="lm")
+minimum_population = 0 #accumulated_cases[T_max + t0]
+x0 = np.array([minimum_population, 1, 1])
+bounds = ([minimum_population, 0, 0.2], [population, 10, 1])
+res = least_squares(SIR_func, x0, bounds=bounds)
+print(res)
 S, I_hat, R = SIR_simulation(res.x[0], I[0], 0, res.x[1], res.x[2], 0.01, T_max)
+print(f"Least squares: S0 = {res.x[0]}, beta = {res.x[1]}, alpha = {res.x[2]}")
 
 plt.figure()
 plt.plot(S, label="Susceptible")
@@ -95,3 +99,43 @@ plt.plot(I_hat, label="Infected (estimated)")
 plt.plot(R, label="Recovered")
 plt.legend()
 plt.savefig("SIR.png")
+
+# Question 3: omega simulation
+omegas = []
+
+for alpha in [
+    1/10, 1/9, 1/8, 1/7, 1/6, 1/5
+]:
+    for R0 in [
+        0.8, 0.9, 0.95, 1, 1.05, 1.1, 1.15, 1.2, 1.3, 1.4, 1.5, 1.6
+    ]:
+        for N in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
+            N_max = population * N
+
+            omegas.append((alpha, R0 * alpha, N_max))
+
+print("Question 3: omega simulation begins")
+Js = []
+for alpha, beta, N_max in omegas:
+    S, I_hat, R = SIR_simulation(N_max, I[0], 0, beta, alpha, 0.01, T_max)
+    J = np.sum((I - I_hat) ** 2)
+    Js.append(J)
+
+omegas = np.array(omegas)
+Js = np.array(Js)
+print("Question 3: omega simulation ends")
+
+# Question 4: plot the results
+plt.figure()
+plt.scatter(omegas[:, 1], omegas[:, 2], c=Js)
+
+# Also plot the minimum
+min_J = np.argmin(Js)
+plt.scatter(omegas[min_J, 1], omegas[min_J, 2], c="red", marker="x", label="Minimum")
+
+plt.xlabel("beta")
+plt.ylabel("N")
+plt.title("J vs beta and N")
+plt.colorbar()
+plt.legend()
+plt.savefig("J_vs_beta_and_N.png")
