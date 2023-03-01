@@ -3,12 +3,13 @@ import csv
 from matplotlib import pyplot as plt
 from functools import partial
 from scipy.optimize import least_squares
+from scipy.integrate import odeint
 
 # Hyperparameters
 T_max = 119
 
 # Load data
-reader = csv.reader(open('project10_data.csv', 'r'))
+reader = csv.reader(open("project10_data.csv", "r"))
 titles = np.array(next(reader))
 data = np.array(list(reader))
 
@@ -25,7 +26,7 @@ T_max = 119
 I = np.zeros(T_max + 1)
 
 for t in range(0, T_max + 1):
-    I[t] = accumulated_cases[t + t0 + 7] - accumulated_cases[t + t0 -7]
+    I[t] = accumulated_cases[t + t0 + 7] - accumulated_cases[t + t0 - 7]
 
 plt.figure()
 plt.plot(I)
@@ -33,94 +34,46 @@ plt.savefig("I.png")
 
 # Question 2: implement an Euler schema for the SIR model
 
-def SIR_simulation(S0, I0, R0, beta, alpha, T0, T_max):
-    transition_matrix = lambda p: np.array(
-        [
-            [np.exp(-beta * T0 * I0), 0, 0],
-            [
-                beta * I0 / (alpha - beta * I0) * np.exp(-beta * T0 * I0) - 
-                beta * I0 / (alpha - beta * I0) * np.exp(-alpha * T0),
-                np.exp(-alpha * T0),
-                0
-            ],
-            [
-                1 - alpha / (alpha - beta * I0) * np.exp(-beta * T0 * I0) +
-                beta * I0 / (alpha - beta * I0) * np.exp(-alpha * T0),
-                1 - np.exp(-alpha * T0),
-                1
-            ]
-        ]
-    )
 
-    def euler_step(S, I, R, transition_matrix):
-        return np.matmul(transition_matrix, np.array([S, I, R]))
+def f(y, t, alpha, beta):
+    S, I, R = y
+    d0 = -alpha * S * I  # derivative of S(t)
+    d1 = alpha * S * I - beta * I  # derivative of I(t)
+    d2 = beta * I  # derivative of R(t)
+    return [d0, d1, d2]
 
-    results = [
-        [S0, I0, R0]
-    ]
 
-    for t in range(1, T_max + 1):
-        S0, I0, R0 = euler_step(S0, I0, R0, transition_matrix(t))
-        results.append([S0, I0, R0])
+def SIR_simulation(x, return_all=False):
+    alpha, beta, N = x
+    y_0 = [1, I[0] / N, 0]  # Susceptible, Infected, Recovered
 
-    S = np.array([result[0] for result in results])
-    I = np.array([result[1] for result in results])
-    R = np.array([result[2] for result in results])
+    t = np.arange(start=1, stop=T_max+1.01, step=0.01)
+    y = odeint(partial(f, alpha=alpha, beta=beta), y_0, t)
+    y = y[::100]
 
-    return S, I, R
+    if return_all:
+        return y[:, 0], y[:, 1], y[:, 2]
 
-def SIR_func(x):
-    # h = 0.01
-    R0 = 0
-    I0 = I[0]
-    T0 = 0.01
+    return I - y[:, 1] * N
 
-    S0 = x[0]
-    beta = x[1]
-    alpha = x[2]
-    
-    _, I_hat, _ = SIR_simulation(S0, I0, R0, beta, alpha, T0, T_max)
-
-    return I - I_hat
-
-# Least squares
-minimum_population = 0 #accumulated_cases[T_max + t0]
-x0 = np.array([minimum_population, 1, 1])
-bounds = ([minimum_population, 0, 0.2], [population, 10, 1])
-res = least_squares(SIR_func, x0, bounds=bounds)
-print(res)
-S, I_hat, R = SIR_simulation(res.x[0], I[0], 0, res.x[1], res.x[2], 0.01, T_max)
-print(f"Least squares: S0 = {res.x[0]}, beta = {res.x[1]}, alpha = {res.x[2]}")
-
-plt.figure()
-plt.plot(S, label="Susceptible")
-plt.plot(I, label="Infected")
-plt.plot(I_hat, label="Infected (estimated)")
-plt.plot(R, label="Recovered")
-plt.legend()
-plt.savefig("SIR.png")
 
 # Question 3: omega simulation
 omegas = []
 
-for alpha in [
-    1/10, 1/9, 1/8, 1/7, 1/6, 1/5
-]:
-    for R0 in [
-        0.8, 0.9, 0.95, 1, 1.05, 1.1, 1.15, 1.2, 1.3, 1.4, 1.5, 1.6
-    ]:
+for alpha in [1 / 10, 1 / 9, 1 / 8, 1 / 7, 1 / 6, 1 / 5]:
+    for R0 in [0.8, 0.9, 0.95, 1, 1.05, 1.1, 1.15, 1.2, 1.3, 1.4, 1.5, 1.6]:
         for N in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
             N_max = population * N
-
             omegas.append((alpha, R0 * alpha, N_max))
 
 print("Question 3: omega simulation begins")
 Js = []
 for alpha, beta, N_max in omegas:
-    S, I_hat, R = SIR_simulation(N_max, I[0], 0, beta, alpha, 0.01, T_max)
-    J = np.sum((I - I_hat) ** 2)
+    S, I_hat, R = SIR_simulation((alpha, beta, N_max), return_all=True)
+    J = np.sqrt(np.sum((I - I_hat * N_max) ** 2))
     Js.append(J)
 
+# print(Js)
 omegas = np.array(omegas)
 Js = np.array(Js)
 print("Question 3: omega simulation ends")
@@ -139,3 +92,24 @@ plt.title("J vs beta and N")
 plt.colorbar()
 plt.legend()
 plt.savefig("J_vs_beta_and_N.png")
+
+
+# Visualize the best fit
+alpha, beta, N_max = omegas[min_J]
+print(data.shape)
+T_max = 200
+I = np.zeros(T_max + 1)
+
+for t in range(0, T_max + 1):
+    I[t] = accumulated_cases[t + t0 + 7] - accumulated_cases[t + t0 - 7]
+
+S, I_hat, R = SIR_simulation((alpha, beta, N_max), return_all=True)
+plt.figure()
+plt.plot(I, label="I")
+# print(S * N_max, I_hat * N_max)
+# plt.plot(S * N_max, label="S")
+plt.plot(I_hat * N_max, label="I_hat")
+# plt.plot(R * N_max, label="R")
+
+plt.legend()
+plt.savefig("I_vs_I_hat.png")
