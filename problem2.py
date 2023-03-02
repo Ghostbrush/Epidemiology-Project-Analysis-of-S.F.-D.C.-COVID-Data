@@ -35,26 +35,26 @@ plt.savefig("I.png")
 # Question 2: implement an Euler schema for the SIR model
 
 
-def f(y, t, alpha, beta):
+def f(y, t, alpha, beta, N):
     S, I, R = y
-    d0 = -alpha * S * I  # derivative of S(t)
-    d1 = alpha * S * I - beta * I  # derivative of I(t)
-    d2 = beta * I  # derivative of R(t)
+    d0 = -beta * S * I/N  # derivative of S(t)
+    d1 = beta * S * I/N - alpha * I  # derivative of I(t)
+    d2 = alpha * I  # derivative of R(t)
     return [d0, d1, d2]
 
 
 def SIR_simulation(x, return_all=False):
     alpha, beta, N = x
-    y_0 = [1, I[0] / N, 0]  # Susceptible, Infected, Recovered
+    y_0 = [N, I[0], 0]  # Susceptible, Infected, Recovered
 
     t = np.arange(start=1, stop=T_max+1.01, step=0.01)
-    y = odeint(partial(f, alpha=alpha, beta=beta), y_0, t)
+    y = odeint(partial(f, alpha=alpha, beta=beta, N=N), y_0, t)
     y = y[::100]
 
     if return_all:
         return y[:, 0], y[:, 1], y[:, 2]
 
-    return I - y[:, 1] * N
+    return I - y[:, 1]
 
 
 # Question 3: omega simulation
@@ -70,7 +70,7 @@ print("Question 3: omega simulation begins")
 Js = []
 for alpha, beta, N_max in omegas:
     S, I_hat, R = SIR_simulation((alpha, beta, N_max), return_all=True)
-    J = np.sqrt(np.sum((I - I_hat * N_max) ** 2))
+    J = np.sqrt(np.sum((I - I_hat) ** 2))
     Js.append(J)
 
 # print(Js)
@@ -96,19 +96,12 @@ plt.savefig("J_vs_beta_and_N.png")
 
 # Visualize the best fit
 alpha, beta, N_max = omegas[min_J]
-print(data.shape)
-T_max = 200
-I = np.zeros(T_max + 1)
-
-for t in range(0, T_max + 1):
-    I[t] = accumulated_cases[t + t0 + 7] - accumulated_cases[t + t0 - 7]
-
 S, I_hat, R = SIR_simulation((alpha, beta, N_max), return_all=True)
 plt.figure()
 plt.plot(I, label="I")
 # print(S * N_max, I_hat * N_max)
 # plt.plot(S * N_max, label="S")
-plt.plot(I_hat * N_max, label="I_hat")
+plt.plot(I_hat, label="I_hat")
 # plt.plot(R * N_max, label="R")
 
 plt.legend()
